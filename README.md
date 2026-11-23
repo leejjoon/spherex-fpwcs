@@ -17,6 +17,7 @@ fixed focal-plane template.
 
 | | |
 |---|---|
+| [Project page](https://leejjoon.github.io/spherex-fpwcs/) | interactive demonstration: the sky under the old and new WCS |
 | [User guide](#user-guide) | this page |
 | [How it works](docs/technical.md) | algorithm, template, conventions |
 | [Distortion and accuracy report](docs/report.md) | the DR1 problem, SPHEREx distortion, validation |

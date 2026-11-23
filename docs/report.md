@@ -1,5 +1,7 @@
 # SPHEREx distortion and the accuracy of star-free WCS repair
 
+[Project page](https://leejjoon.github.io/spherex-fpwcs/) · [Repository](https://github.com/leejjoon/spherex-fpwcs)
+
 Analysis of SPHEREx DR1 Level-2 spectral images (processing `l2b-v27`), November 2026.
 
 ## Summary

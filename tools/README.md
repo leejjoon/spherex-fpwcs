@@ -21,6 +21,7 @@ They expect to be run from an analysis directory that contains the package check
 | `measure_resid.py` | star offsets per cell under the header WCS | images, `cat/` | `out/resid_*.json` |
 | `remeasure_with_standard_sip.py` | detection and cell-measurement helpers; refit with a standard SIP | images, `cat/` | console |
 | `pkg_validate.py` | end-to-end star validation of the package | images (downloaded on demand), IRSA TAP | `out/pkg_validate_*.json` |
+| `make_site_data.py` | images, star positions and statistics for the project page | images, `cat/`, `out/` | `docs/site/` |
 | `make_figures.py` | figures of the report | `out/` | `docs/figures/` |
 
 The header-only steps need no image downloads. The star validation downloads about 60 MB per

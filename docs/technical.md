@@ -1,5 +1,7 @@
 # How spherex-fpwcs works
 
+[Project page](https://leejjoon.github.io/spherex-fpwcs/) · [Repository](https://github.com/leejjoon/spherex-fpwcs)
+
 ## 1. The idea
 
 SPHEREx images the sky onto two focal planes behind a dichroic, each with three 2040×2040

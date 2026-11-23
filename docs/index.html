@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>spherex-fpwcs: star-free WCS repair for SPHEREx Level-2 images</title>
+<meta name="description" content="Check and repair the astrometry of SPHEREx Level-2 spectral images from the headers of the six detectors, without fitting stars.">
+<style>
+:root{
+  color-scheme:light;
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --wash:rgba(11,11,11,.05);
+  --s1:#2a78d6; --s2:#eb6834; --good:#0ca30c; --warn:#fab219; --crit:#d03b3b; --link:#1c5cab;
+  --code:#f0efec;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    color-scheme:dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --wash:rgba(255,255,255,.06);
+    --s1:#3987e5; --s2:#d95926; --link:#86b6ef; --code:#262624;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--link)}
+main,header.top{max-width:1040px;margin:0 auto;padding:0 16px}
+header.top{padding-top:40px}
+h1{font-size:34px;line-height:1.15;margin:0 0 10px;letter-spacing:-.01em}
+h2{font-size:24px;line-height:1.25;margin:0 0 8px}
+h3{font-size:16px;margin:0 0 4px}
+p{margin:0 0 12px;max-width:72ch}
+.lead{font-size:18px;color:var(--ink2)}
+section{margin:56px 0}
+.small{font-size:13px;color:var(--ink2)}
+code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--code);padding:1px 5px;border-radius:4px}
+pre{background:var(--code);padding:14px 16px;border-radius:8px;overflow-x:auto;margin:0 0 12px;line-height:1.5}
+pre code{background:none;padding:0}
+.nav{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0}
+.nav a{display:inline-block;padding:7px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);text-decoration:none;color:var(--ink);font-size:14px}
+.nav a:hover{background:var(--wash)}
+.nav a.primary{background:var(--ink);color:var(--page);border-color:var(--ink)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:28px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.tile b{display:block;font-size:28px;line-height:1.1;font-weight:650}
+.tile span{font-size:13px;color:var(--ink2)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-bottom:12px}
+.controls .lab{font-size:13px;color:var(--ink2);margin-right:6px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button,.btn{font:inherit;font-size:13px;padding:6px 11px;border:0;background:none;color:var(--ink);cursor:pointer}
+.seg button+button{border-left:1px solid var(--border)}
+.seg button:hover,.btn:hover{background:var(--wash)}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--page)}
+.btn{border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.btn[aria-pressed=true]{background:var(--ink);color:var(--page)}
+.viewer{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:16px;align-items:start}
+.stage{position:relative;background:#000;border-radius:8px;overflow:hidden;aspect-ratio:1/1}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+.stage canvas.drag{cursor:grabbing}
+.badge{position:absolute;left:10px;top:10px;font-size:13px;font-weight:600;padding:4px 9px;border-radius:6px;background:rgba(0,0,0,.72);color:#fff;pointer-events:none}
+.hint{position:absolute;left:10px;bottom:10px;font-size:12px;padding:3px 8px;border-radius:6px;background:rgba(0,0,0,.72);color:#ddd;pointer-events:none}
+.zoomb{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:4px}
+.zoomb button{width:30px;height:30px;border-radius:6px;border:0;background:rgba(0,0,0,.72);color:#fff;font-size:18px;cursor:pointer}
+.side h3{margin-top:14px}.side h3:first-child{margin-top:0}
+#mini{width:100%;aspect-ratio:1/1;border-radius:6px;background:#000;cursor:crosshair;display:block}
+.regions{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.regions button{font:inherit;font-size:12px;padding:5px 0;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);cursor:pointer}
+.regions button:hover{background:var(--wash)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink2)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-1px;margin-right:5px}
+.legend i.ring{background:none;border:2px solid}
+.readout{font-size:14px;margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--wash)}
+#fileinfo{overflow-wrap:anywhere}
+.readout b{font-variant-numeric:tabular-nums}
+.fp{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.det{min-width:0}
+.det svg{display:block;width:100%;height:auto;border-radius:4px}
+.det .cap{display:flex;justify-content:space-between;gap:6px;font-size:13px;margin-bottom:4px}
+.verdict{white-space:nowrap}
+.verdict i{font-style:normal;font-weight:700;margin-right:3px}
+.scale{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);margin-top:14px;flex-wrap:wrap}
+.scale .bar{display:flex;height:12px;width:240px;border-radius:3px;overflow:hidden}
+.scale .bar span{flex:1}
+.scale .ticks{display:flex;justify-content:space-between;width:240px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+svg text{fill:var(--ink2);font-size:12px;font-family:inherit}
+svg text.strong{fill:var(--ink);font-weight:600}
+svg .mono{font-size:11px}
+#tip{position:fixed;z-index:10;pointer-events:none;background:var(--ink);color:var(--page);font-size:12px;line-height:1.4;padding:6px 9px;border-radius:6px;max-width:260px;display:none;white-space:pre-line}
+details{margin-top:12px;font-size:13px}
+table{border-collapse:collapse;font-size:12px;width:100%}
+th,td{text-align:right;padding:3px 8px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+.tablewrap{overflow-x:auto}
+footer{max-width:1040px;margin:0 auto;padding:24px 16px 48px;color:var(--ink2);font-size:13px;border-top:1px solid var(--grid)}
+@media (max-width:760px){
+  h1{font-size:27px}.tiles{grid-template-columns:repeat(2,1fr)}
+  .viewer{grid-template-columns:1fr}.side{display:grid;grid-template-columns:150px 1fr;gap:14px}
+  .two{grid-template-columns:1fr}.fp{gap:8px}.det .cap{flex-direction:column;gap:0}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>spherex-fpwcs</h1>
+  <p class="lead">Check and repair the astrometry of SPHEREx Level-2 spectral images without fitting stars. The tool reads the headers of the six detectors of one exposure, fits one telescope attitude to them, and regenerates the WCS of any detector that disagrees.</p>
+  <div class="nav">
+    <a class="primary" href="https://github.com/leejjoon/spherex-fpwcs">GitHub repository</a>
+    <a href="https://github.com/leejjoon/spherex-fpwcs#user-guide">User guide</a>
+    <a href="technical.html">How it works</a>
+    <a href="report.html">Distortion and accuracy report</a>
+  </div>
+  <div class="tiles">
+    <div class="tile"><b>0.6%</b><span>of DR1 files in one week have a WCS wrong by more than 1 px, all flagged good</span></div>
+    <div class="tile"><b>11 px</b><span>largest error measured on stars (68″)</span></div>
+    <div class="tile"><b>0.03 px</b><span>median rms against 2MASS after repair, 31 images</span></div>
+    <div class="tile"><b>6 headers</b><span>are the only input: no images, no star catalogue</span></div>
+  </div>
+</header>
+<main>
+
+<section id="sky">
+  <h2>The problem, on the sky</h2>
+  <p>This is the DR1 image where the problem was first reported, with 2MASS stars marked at the pixel positions the WCS predicts. Under the DR1 header the circles drift off the stars towards the left edge of the detector, by up to 11 pixels, although the file is flagged <code>FINAST = 0</code>. Under the WCS regenerated by spherex-fpwcs they sit on the stars everywhere. Switch the WCS or press Blink to compare; the original report used K&nbsp;&lt;&nbsp;10.5, which the slider reproduces.</p>
+  <div class="card">
+    <div class="controls">
+      <div><span class="lab">File</span><span class="seg" id="fileSeg"></span></div>
+      <div><span class="lab">WCS</span><span class="seg" id="modeSeg">
+        <button data-m="dr1">DR1 header</button><button data-m="new">spherex-fpwcs</button><button data-m="both">Both</button></span></div>
+      <button class="btn" id="blink" aria-pressed="false">Blink</button>
+      <label class="small">Catalogue limit K &lt; <b id="kval">9.0</b> <input id="klim" type="range" min="7" max="10.5" step="0.5" value="9" style="vertical-align:middle;width:110px"></label>
+    </div>
+    <div class="viewer">
+      <div>
+        <div class="stage">
+          <canvas id="view" aria-label="Sky image with catalogue star positions"></canvas>
+          <div class="badge" id="badge"></div>
+          <div class="hint" id="hint">drag to pan · buttons or Ctrl+wheel to zoom</div>
+          <div class="zoomb"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button></div>
+        </div>
+        <div class="readout" id="readout"></div>
+      </div>
+      <div class="side">
+        <div>
+          <h3>Whole detector</h3>
+          <canvas id="mini" width="500" height="500" aria-label="Detector overview; click to move the view"></canvas>
+          <p class="small" style="margin-top:6px">Arrows: shift of the DR1 header relative to spherex-fpwcs, drawn 20× enlarged; squares mark shifts below 0.2 px. Click to move the view.</p>
+        </div>
+        <div>
+          <h3>Nine regions of the original report</h3>
+          <div class="regions" id="regions"></div>
+          <h3>Legend</h3>
+          <div class="legend">
+            <span><i class="ring" style="border-color:#ff7a3d"></i>2MASS position, DR1 header</span>
+            <span><i class="ring" style="border-color:#5aa9ff"></i>2MASS position, spherex-fpwcs</span>
+          </div>
+          <p class="small" style="margin-top:10px" id="fileinfo"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="small" style="margin-top:10px">Images are background-subtracted and asinh-stretched for display. One pixel is 6.15″. The fourth file is a control from the same pointing whose DR1 WCS is sound.</p>
+</section>
+
+<section id="fp">
+  <h2>Six detectors, one attitude</h2>
+  <p>All six detectors are exposed together and do not move relative to each other, so one telescope attitude and one plate scale fix the WCS of all of them. Each map shows how far a detector's DR1 header departs from that common solution. A bad header stands out against the five that agree, and those five are enough to regenerate it.</p>
+  <div class="card">
+    <div class="controls"><div><span class="lab">Exposure</span><span class="seg" id="expSeg"></span></div></div>
+    <p class="small" id="expinfo"></p>
+    <div class="fp" id="fpgrid"></div>
+    <div class="scale"><span>header minus common solution</span>
+      <div><div class="bar" id="scalebar"></div><div class="ticks"><span>0.03</span><span>0.1</span><span>0.3</span><span>1</span><span>3</span><span>10 px</span></div></div>
+    </div>
+  </div>
+  <p class="small" style="margin-top:10px">Detectors 1–3 and 4–6 are two focal planes behind a dichroic; 1 and 4, 2 and 5, 3 and 6 see the same sky. Each map is a 12×12 grid over the full detector. Verdicts: consistent below 0.3 px, marginal 0.3–1 px, inconsistent above 1 px.</p>
+</section>
+
+<section id="val">
+  <h2>Accuracy on stars</h2>
+  <p>For 31 images the star positions were measured against 2MASS under both WCSs. Each row is one image; the dots give the worst 255-pixel cell on the detector. The regenerated WCS stays at or below 0.11 px in every case, including exposures with two bad detectors, and leaves sound files unchanged.</p>
+  <div class="card">
+    <div class="legend" style="margin-bottom:8px">
+      <span><i style="background:var(--s2)"></i>DR1 header</span>
+      <span><i style="background:var(--s1)"></i>spherex-fpwcs</span>
+      <span>worst cell, pixels (log scale)</span>
+    </div>
+    <div id="dumb"></div>
+    <details><summary>Table of all 31 images</summary><div class="tablewrap" id="valtable"></div></details>
+  </div>
+</section>
+
+<section id="stats">
+  <h2>How often it happens</h2>
+  <p>Share of DR1 files whose header departs from the common solution by more than 1 px. Every one of them carries <code>FINAST = 0</code>. The failures concentrate in crowded fields near the Galactic plane.</p>
+  <div class="controls"><span class="seg" id="statSeg"><button data-s="week">One week, March 2026</button><button data-s="year">29 epochs, Apr 2025 – May 2026</button></span><span class="small" id="statinfo"></span></div>
+  <div class="two">
+    <div class="card"><h3>By Galactic latitude |b|</h3><div id="barLat"></div></div>
+    <div class="card"><h3>By detector</h3><div id="barDet"></div></div>
+  </div>
+</section>
+
+<section id="use">
+  <h2>Use it</h2>
+  <pre><code>pip install git+https://github.com/leejjoon/spherex-fpwcs
+
+spherex-fpwcs check  level2_2026W13_2A_0568_2D5_spx_l2b-v27-2026-237.fits   # diagnose
+spherex-fpwcs header level2_2026W13_2A_0568_2D5_spx_l2b-v27-2026-237.fits   # print the new WCS cards
+spherex-fpwcs apply  level2_2026W13_2A_0568_2D5_spx_l2b-v27-2026-237.fits -o fixed.fits</code></pre>
+  <p>The headers of the other five detectors are fetched from the public SPHEREx bucket with byte-range requests; a run takes about five seconds. The package depends only on <code>numpy</code> and <code>astropy</code>. See the <a href="https://github.com/leejjoon/spherex-fpwcs#user-guide">user guide</a> for options and Python use, <a href="technical.html">how it works</a> for the algorithm, and the <a href="report.html">report</a> for the SPHEREx distortion, its stability over 13 months and the full validation.</p>
+  <p class="small">Limits: at least three detectors of the exposure must be available and most of them sound. The focal-plane template is the median of DR1 (processing v27) solutions, so it inherits any error common to all of them.</p>
+</section>
+</main>
+<footer>spherex-fpwcs · MIT licence · built on public SPHEREx DR1 data from NASA/IPAC IRSA and the 2MASS point source catalogue.</footer>
+<div id="tip"></div>
+
+<script>
+const N = 2040, $ = s => document.querySelector(s), tip = $('#tip');
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const dark = () => matchMedia('(prefers-color-scheme:dark)').matches;
+const RAMP = ['#cde2fb','#b7d3f6','#9ec5f4','#86b6ef','#6da7ec','#5598e7','#3987e5','#2a78d6','#256abf','#1c5cab','#184f95','#104281','#0d366b'];
+const ramp = t => { const r = dark() ? [...RAMP].reverse() : RAMP; return r[Math.max(0, Math.min(r.length - 1, Math.round(t * (r.length - 1))))]; };
+const heatT = m => Math.log10(Math.max(m, 0.03) / 0.03) / Math.log10(10 / 0.03);
+const fmt = (v, d = 2) => v.toFixed(d);
+function showTip(e, text){ tip.textContent = text; tip.style.display = 'block';
+  const w = tip.offsetWidth, h = tip.offsetHeight; let x = e.clientX + 14, y = e.clientY + 14;
+  if (x + w > innerWidth - 8) x = e.clientX - w - 14; if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+  tip.style.left = Math.max(4, x) + 'px'; tip.style.top = Math.max(4, y) + 'px'; }
+const hideTip = () => tip.style.display = 'none';
+function seg(el, items, cur, on){ el.innerHTML = '';
+  items.forEach(([k, label]) => { const b = document.createElement('button'); b.textContent = label; b.setAttribute('aria-pressed', k === cur);
+    b.onclick = () => { [...el.children].forEach(c => c.setAttribute('aria-pressed', c === b)); on(k); }; el.appendChild(b); }); }
+const verdict = m => m > 1 ? ['✕', 'inconsistent', 'var(--crit)'] : m > 0.3 ? ['▲', 'marginal', 'var(--warn)'] : ['✓', 'consistent', 'var(--good)'];
+
+fetch('site/data.json').then(r => r.json()).then(D => { viewer(D.sky); focal(D.exposures); validation(D.validation); stats(D); });
+
+/* ---------- sky viewer ---------- */
+function viewer(files){
+  const cv = $('#view'), ctx = cv.getContext('2d'), mini = $('#mini'), mctx = mini.getContext('2d');
+  const cache = {}; let cur = null, mode = 'dr1', cx = 50, cy = 1990, zoom = 6, blink = null, W = 600, klim = 90;
+  const C = { dr1: '#ff7a3d', new: '#5aa9ff' };
+  function size(){ const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; W = r.width; cv.width = Math.round(W * d); cv.height = Math.round(W * d); ctx.setTransform(d, 0, 0, d, 0, 0); }
+  function clamp(){ const minz = W / N; zoom = Math.max(minz, Math.min(24, zoom)); const half = W / zoom / 2;
+    cx = Math.max(half - .5, Math.min(N - .5 - half, cx)); cy = Math.max(half - .5, Math.min(N - .5 - half, cy)); }
+  function draw(){
+    if (!cur || !cur.img) return; clamp();
+    const half = W / zoom / 2, L = cx + .5 - half, T = (N - (cy + .5)) - half;      // left/top in image-edge coordinates
+    ctx.imageSmoothingEnabled = zoom < 1.5; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, W);
+    ctx.drawImage(cur.img, L, T, 2 * half, 2 * half, 0, 0, W, W);
+    const s = cur.stars, n = s.length / 5, show = zoom >= 2.2; let sx = 0, sy = 0, k = 0;
+    const r = Math.max(4, zoom * 1.15); ctx.lineWidth = 1.6;
+    const pass = which => { const o = which === 'dr1' ? 0 : 2; ctx.strokeStyle = C[which]; ctx.beginPath();
+      for (let i = 0; i < n; i++){ if (s[5*i+4] > klim) continue; const X = (s[5*i+o] / 10 + .5 - L) * zoom, Y = (N - (s[5*i+o+1] / 10 + .5) - T) * zoom;
+        if (X < -r || Y < -r || X > W + r || Y > W + r) continue; ctx.moveTo(X + r, Y); ctx.arc(X, Y, r, 0, 6.2832); } ctx.stroke(); };
+    for (let i = 0; i < n; i++){ if (s[5*i+4] > klim) continue; const x = s[5*i+2] / 10, y = s[5*i+3] / 10;
+      if (Math.abs(x - cx) < half && Math.abs(y - cy) < half){ sx += s[5*i] / 10 - x; sy += s[5*i+1] / 10 - y; k++; } }
+    if (show){ if (mode !== 'new') pass('dr1'); if (mode !== 'dr1') pass('new'); }
+    $('#hint').textContent = show ? 'drag to pan · buttons or Ctrl+wheel to zoom' : 'zoom in to see the catalogue positions';
+    const b = $('#badge'); b.textContent = mode === 'both' ? 'DR1 header + spherex-fpwcs' : mode === 'dr1' ? 'DR1 header WCS' : 'spherex-fpwcs WCS';
+    b.style.color = mode === 'both' ? '#fff' : C[mode];
+    const off = k ? Math.hypot(sx / k, sy / k) : 0;
+    $('#readout').innerHTML = `View centre x = <b>${Math.round(cx)}</b>, y = <b>${Math.round(cy)}</b> · ${Math.round(2 * half)} px across · ${k} stars with K < ${(klim / 10).toFixed(1)} in view<br>` +
+      (k ? `Here the DR1 header places the stars <b>${fmt(off)} px</b> (${fmt(off * 6.15, 1)}″) from where spherex-fpwcs places them` +
+        (off > 0.02 ? `: Δx = <b>${fmt(sx / k)}</b>, Δy = <b>${fmt(sy / k)}</b>.` : '.') : '');
+    drawMini(half);
+  }
+  function drawMini(half){ const M = mini.width, f = M / N; mctx.fillStyle = '#000'; mctx.fillRect(0, 0, M, M);
+    mctx.imageSmoothingEnabled = true; mctx.globalAlpha = .75; mctx.drawImage(cur.img, 0, 0, M, M); mctx.globalAlpha = 1;
+    mctx.strokeStyle = mctx.fillStyle = C.dr1; mctx.lineWidth = 2.5;
+    cur.meta.grid.forEach(([x, y, dx, dy], gi) => { if ((gi % 16) % 2 || Math.floor(gi / 16) % 2) return; const m = Math.hypot(dx, dy); if (m < 0.2) { mctx.fillRect(x * f - 2.5, (N - y) * f - 2.5, 5, 5); return; }
+      const x0 = x * f, y0 = (N - y) * f, x1 = x0 + dx * 20 * f, y1 = y0 - dy * 20 * f, a = Math.atan2(y1 - y0, x1 - x0);
+      mctx.beginPath(); mctx.moveTo(x0, y0); mctx.lineTo(x1, y1); mctx.stroke();
+      mctx.beginPath(); mctx.moveTo(x1, y1); mctx.lineTo(x1 - 9 * Math.cos(a - .45), y1 - 9 * Math.sin(a - .45)); mctx.lineTo(x1 - 9 * Math.cos(a + .45), y1 - 9 * Math.sin(a + .45)); mctx.fill(); });
+    mctx.strokeStyle = '#fff'; mctx.lineWidth = 3; const s = Math.max(2 * half * f, 10);
+    mctx.strokeRect((cx + .5) * f - s / 2, (N - cy - .5) * f - s / 2, s, s); }
+  function load(tag){ const meta = files.find(f => f.tag === tag); cur = cache[tag] || (cache[tag] = { meta });
+    $('#fileinfo').innerHTML = `<span class="mono">${meta.file}</span><br>${meta.nstars.toLocaleString()} 2MASS stars. Header check: largest deviation ${fmt(meta.check_max)} px, ${verdict(meta.check_max)[1]}.`;
+    if (cur.img && cur.stars) return draw();
+    $('#readout').textContent = 'Loading image…';
+    const img = new Image(); img.onload = () => { cur.img = img; if (cur.stars && cur === cache[tag]) draw(); }; img.src = `site/sky_${tag}.png`;
+    fetch(`site/stars_${tag}.bin`).then(r => r.arrayBuffer()).then(b => { cache[tag].stars = new Int16Array(b); if (cache[tag].img && cur === cache[tag]) draw(); }); }
+  function setMode(m){ mode = m; [...$('#modeSeg').children].forEach(c => c.setAttribute('aria-pressed', c.dataset.m === m)); draw(); }
+  seg($('#fileSeg'), files.map(f => [f.tag, f.note === 'control' ? f.tag + ' (control)' : f.tag]), files[0].tag, t => load(t));
+  [...$('#modeSeg').children].forEach(c => c.onclick = () => { stopBlink(); setMode(c.dataset.m); });
+  function stopBlink(){ clearInterval(blink); blink = null; $('#blink').setAttribute('aria-pressed', false); }
+  $('#blink').onclick = () => { if (blink) return stopBlink(); $('#blink').setAttribute('aria-pressed', true);
+    setMode(mode === 'dr1' ? 'new' : 'dr1'); blink = setInterval(() => setMode(mode === 'dr1' ? 'new' : 'dr1'), 800); };
+  const names = ['top-left','top','top-right','left','centre','right','bottom-left','bottom','bottom-right'];
+  names.forEach((nm, i) => { const b = document.createElement('button'); b.textContent = nm;
+    b.onclick = () => { cx = [50, 1020, 1990][i % 3]; cy = [1990, 1020, 50][Math.floor(i / 3)]; zoom = W / 100; draw(); }; $('#regions').appendChild(b); });
+  $('#zin').onclick = () => { zoom *= 1.6; draw(); }; $('#zout').onclick = () => { zoom /= 1.6; draw(); };
+  cv.addEventListener('wheel', e => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); zoom *= e.deltaY < 0 ? 1.2 : 1 / 1.2; draw(); }, { passive: false });
+  cv.addEventListener('dblclick', () => { zoom *= 1.6; draw(); });
+  let drag = null; const pts = new Map(); let pinch = 0;
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, e); drag = { x: e.clientX, y: e.clientY }; cv.classList.add('drag'); pinch = 0; });
+  cv.addEventListener('pointermove', e => { if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, e);
+    if (pts.size === 2){ const [a, b] = [...pts.values()], d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY); if (pinch) zoom *= d / pinch; pinch = d; return draw(); }
+    cx -= (e.clientX - drag.x) / zoom; cy += (e.clientY - drag.y) / zoom; drag = { x: e.clientX, y: e.clientY }; draw(); });
+  const up = e => { pts.delete(e.pointerId); cv.classList.remove('drag'); pinch = 0; const r = [...pts.values()][0]; if (r) drag = { x: r.clientX, y: r.clientY }; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  const jump = e => { const r = mini.getBoundingClientRect(); cx = (e.clientX - r.left) / r.width * N - .5; cy = N - (e.clientY - r.top) / r.height * N - .5; draw(); };
+  mini.addEventListener('pointerdown', e => { mini.setPointerCapture(e.pointerId); jump(e); mini.onpointermove = jump; });
+  mini.addEventListener('pointerup', () => mini.onpointermove = null);
+  addEventListener('resize', () => { size(); draw(); });
+  size(); zoom = W / 100; setMode('dr1'); load(files[0].tag);
+  $('#klim').oninput = e => { klim = Math.round(e.target.value * 10); $('#kval').textContent = (+e.target.value).toFixed(1); draw(); };
+}
+
+/* ---------- focal-plane consistency ---------- */
+function focal(exps){
+  const grid = $('#fpgrid'); let cur = exps[0];
+  function render(){ grid.innerHTML = '';
+    $('#expinfo').innerHTML = `<span class="mono">${cur.id}</span> · ${cur.label} · fitted plate-scale offset ${cur.scale_ppm >= 0 ? '+' : ''}${fmt(cur.scale_ppm, 1)} ppm (velocity aberration)`;
+    for (let d = 1; d <= 6; d++){ const det = cur.dets[d], div = document.createElement('div'); div.className = 'det';
+      if (!det){ div.innerHTML = `<div class="cap"><b>D${d}</b><span>not released</span></div>`; grid.appendChild(div); continue; }
+      const [ic, word, col] = verdict(det.max);
+      let s = `<div class="cap"><span><b>D${d}</b> · max ${fmt(det.max)} px</span><span class="verdict"><i style="color:${col}">${ic}</i>${word}</span></div><svg viewBox="0 0 120 120" role="img" aria-label="Detector ${d}: largest deviation ${fmt(det.max)} pixels, ${word}">`;
+      det.v.forEach(([dx, dy], i) => { const gx = i % 12, gy = Math.floor(i / 12), m = Math.hypot(dx, dy);
+        s += `<rect x="${gx * 10 + .5}" y="${(11 - gy) * 10 + .5}" width="9" height="9" rx="1.5" fill="${ramp(heatT(m))}" data-i="${i}"/>`; });
+      div.innerHTML = s + '</svg>'; grid.appendChild(div);
+      const svg = div.querySelector('svg');
+      svg.addEventListener('pointermove', e => { const i = e.target.dataset && e.target.dataset.i; if (i === undefined) return hideTip();
+        const [dx, dy] = det.v[i], gx = i % 12, gy = Math.floor(i / 12);
+        showTip(e, `D${d} · pixel (${Math.round(gx * 2039 / 11)}, ${Math.round(gy * 2039 / 11)})\n|Δ| = ${fmt(Math.hypot(dx, dy), 3)} px\nΔx = ${fmt(dx, 3)}, Δy = ${fmt(dy, 3)}`); });
+      svg.addEventListener('pointerleave', hideTip); }
+    $('#scalebar').innerHTML = Array.from({ length: 13 }, (_, i) => `<span style="background:${ramp(i / 12)}"></span>`).join(''); }
+  seg($('#expSeg'), exps.map(e => [e.id, e.id.slice(11).replace('_', ' / slew ')]), cur.id, id => { cur = exps.find(e => e.id === id); render(); });
+  render(); matchMedia('(prefers-color-scheme:dark)').addEventListener('change', render);
+}
+
+/* ---------- validation dumbbell ---------- */
+function validation(V){
+  const order = ['March 2026', 'other months', 'two bad detectors', 'control'];
+  const title = { 'March 2026': 'Bad files, March 2026', 'other months': 'Bad files, eight other months', 'two bad detectors': 'Exposures with two bad detectors', 'control': 'Sound files (controls)' };
+  V.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group) || b.hdr_max - a.hdr_max);
+  const el = $('#dumb');
+  function render(){ const Wd = Math.max(320, el.clientWidth), narrow = Wd < 560, ml = narrow ? 92 : 170, mr = 16, rh = 19, lo = Math.log10(0.02), hi = Math.log10(20);
+    const X = v => ml + (Math.log10(Math.max(v, 0.02)) - lo) / (hi - lo) * (Wd - ml - mr); let y = 26, s = '', rows = '';
+    const ticks = [0.03, 0.1, 0.3, 1, 3, 10]; let g = null, body = '';
+    V.forEach((r, i) => { if (r.group !== g){ g = r.group; y += 8; body += `<text class="strong" x="0" y="${y + 4}">${title[g]}</text>`; y += rh; }
+      const cy = y; r._y = cy;
+      body += `<g data-i="${i}"><rect x="0" y="${cy - rh / 2}" width="${Wd}" height="${rh}" fill="transparent"/>
+        <text class="mono" x="${ml - 10}" y="${cy + 4}" text-anchor="end">${narrow ? r.file.slice(8) : r.file}</text>
+        <line x1="${X(r.new_max)}" x2="${X(r.hdr_max)}" y1="${cy}" y2="${cy}" stroke="${css('--axis')}" stroke-width="2"/>
+        <circle cx="${X(r.hdr_max)}" cy="${cy}" r="5" fill="${css('--s2')}" stroke="${css('--surface')}" stroke-width="2"/>
+        <circle cx="${X(r.new_max)}" cy="${cy}" r="5" fill="${css('--s1')}" stroke="${css('--surface')}" stroke-width="2"/></g>`; y += rh; });
+    const H = y + 4;
+    ticks.forEach(t => { s += `<line x1="${X(t)}" x2="${X(t)}" y1="20" y2="${H}" stroke="${css(t === 1 ? '--axis' : '--grid')}" ${t === 1 ? 'stroke-dasharray="4 3"' : ''}/><text x="${X(t)}" y="12" text-anchor="middle">${t}</text>`; });
+    el.innerHTML = `<svg width="${Wd}" height="${H}" viewBox="0 0 ${Wd} ${H}" role="img" aria-label="Worst-cell star residual per image under the DR1 header and under spherex-fpwcs">${s}${body}</svg>`;
+    el.querySelectorAll('g[data-i]').forEach(gEl => { const r = V[gEl.dataset.i];
+      gEl.addEventListener('pointermove', e => showTip(e, `${r.file} · ${r.date} · b = ${r.b}°\nDR1 header: worst cell ${fmt(r.hdr_max)} px, rms ${fmt(r.hdr_rms)} px\nspherex-fpwcs: worst cell ${fmt(r.new_max, 3)} px, rms ${fmt(r.new_rms, 3)} px`));
+      gEl.addEventListener('pointerleave', hideTip); }); }
+  render(); addEventListener('resize', render); matchMedia('(prefers-color-scheme:dark)').addEventListener('change', render);
+  $('#valtable').innerHTML = '<table><tr><th>Image</th><th>Group</th><th>Date</th><th>b [°]</th><th>DR1 worst cell</th><th>DR1 rms</th><th>fpwcs worst cell</th><th>fpwcs rms</th></tr>' +
+    V.map(r => `<tr><td class="mono">${r.file}</td><td>${r.group}</td><td>${r.date}</td><td>${r.b}</td><td>${fmt(r.hdr_max)}</td><td>${fmt(r.hdr_rms)}</td><td>${fmt(r.new_max, 3)}</td><td>${fmt(r.new_rms, 3)}</td></tr>`).join('') + '</table>';
+}
+
+/* ---------- failure statistics ---------- */
+function stats(D){
+  let cur = 'week';
+  function bars(el, rows, label){ const Wd = Math.max(260, el.clientWidth), H = 220, ml = 40, mb = 30, mt = 18, pw = Wd - ml - 8, ph = H - mb - mt;
+    const vals = rows.map(r => r.n ? 100 * r.bad / r.n : 0), top = Math.max(1, Math.ceil(Math.max(...vals))), Y = v => mt + ph * (1 - v / top);
+    let s = ''; for (let t = 0; t <= top; t += top > 4 ? 2 : 1) s += `<line x1="${ml}" x2="${Wd - 8}" y1="${Y(t)}" y2="${Y(t)}" stroke="${css(t ? '--grid' : '--axis')}"/><text x="${ml - 6}" y="${Y(t) + 4}" text-anchor="end">${t}%</text>`;
+    const bw = pw / rows.length;
+    rows.forEach((r, i) => { const x = ml + i * bw + bw * .2, w = Math.min(bw * .6, 46), xc = ml + i * bw + bw / 2, h = Math.max(ph * vals[i] / top, vals[i] ? 2 : 0), rr = Math.min(4, h);
+      s += `<g data-i="${i}"><rect x="${ml + i * bw}" y="${mt}" width="${bw}" height="${ph + mb}" fill="transparent"/>
+        <path d="M${xc - w / 2},${mt + ph} v${-(h - rr)} q0,${-rr} ${rr},${-rr} h${w - 2 * rr} q${rr},0 ${rr},${rr} v${h - rr} z" fill="${css('--s1')}"/>
+        <text class="strong" x="${xc}" y="${Y(vals[i]) - 5}" text-anchor="middle">${vals[i] ? fmt(vals[i], vals[i] < 1 ? 2 : 1) + '%' : '0'}</text>
+        <text x="${xc}" y="${H - 10}" text-anchor="middle">${label(r)}</text></g>`; });
+    el.innerHTML = `<svg width="${Wd}" height="${H}" viewBox="0 0 ${Wd} ${H}" role="img">${s}</svg>`;
+    el.querySelectorAll('g[data-i]').forEach(g => { const r = rows[g.dataset.i];
+      g.addEventListener('pointermove', e => showTip(e, `${label(r)}\n${r.bad} of ${r.n.toLocaleString()} files above 1 px`)); g.addEventListener('pointerleave', hideTip); }); }
+  function render(){ const S = D[cur];
+    $('#statinfo').textContent = `${S.bad} of ${S.n.toLocaleString()} files above 1 px (${fmt(100 * S.bad / S.n)}%); ${S.marginal} more between 0.3 and 1 px`;
+    bars($('#barLat'), S.lat, r => r.hi === 90 ? `>${r.lo}°` : `${r.lo}–${r.hi}°`); bars($('#barDet'), S.det, r => 'D' + r.det); }
+  [...$('#statSeg').children].forEach(b => { b.setAttribute('aria-pressed', b.dataset.s === cur);
+    b.onclick = () => { cur = b.dataset.s; [...$('#statSeg').children].forEach(c => c.setAttribute('aria-pressed', c === b)); render(); }; });
+  render(); addEventListener('resize', render); matchMedia('(prefers-color-scheme:dark)').addEventListener('change', render);
+}
+</script>
+</body>
+</html>
